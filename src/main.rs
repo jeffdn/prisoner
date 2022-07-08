@@ -1,7 +1,34 @@
+use std::collections::HashSet;
 use std::sync::mpsc::channel;
 
 use rand::Rng;
 use threadpool::ThreadPool;
+
+fn _allocate_boxes(count: usize) -> Vec<usize> {
+    let mut rng = rand::thread_rng();
+
+    // There are `count` numbered slips and `count` numbered boxes, one for each
+    // prisoner, and each slip is randomly placed in a box.
+    let mut boxes: Vec<Option<usize>> = (0..count).map(|_| None).collect();
+
+    for slip in 0..count {
+        let mut slip_box: usize;
+
+        loop {
+            slip_box = rng.gen_range(0..count);
+
+            match boxes[slip_box as usize] {
+                Some(_) => continue,
+                None => {
+                    boxes[slip_box] = Some(slip);
+                    break;
+                }
+            };
+        }
+    }
+
+    boxes.into_iter().map(|slip| slip.unwrap()).collect()
+}
 
 /// There are 100 prisoners. They are given an opportunity to be released. The
 /// conditions of this release are as follows:
@@ -55,39 +82,46 @@ use threadpool::ThreadPool;
 /// Then, using a random number generator, each slip is assigned to a random box,
 /// with no slip getting the same box. Finally, the prisoners are iterated through,
 /// and each one gets fifty tries to find their slip, by starting with the box
-/// corresponding to their number, as described above. If any prisoner opens fifty
-/// boxes without success, the function exits early, returning false. Otherwise,
-/// all prisoners have necessarily found their number.
+/// corresponding to their number, as described above.
 fn run() -> bool {
-    let mut rng = rand::thread_rng();
-
-    // There are 100 numbered slips, one for each prisoner -- each slip corresponds
-    // to a box.
-    let mut slips: Vec<Option<usize>> = (0..100).map(|_| None).collect();
-    // There are 100 numbered boxes, one for each slip -- each box contains a slip.
-    let mut boxes: Vec<Option<usize>> = slips.clone();
-    // There are 100 prisoners, and whether or not they've found their slip.
+    let boxes = _allocate_boxes(100);
     let mut prisoners: Vec<bool> = (0..100).map(|_| false).collect();
-
-    for slip in 0..100 {
-        let mut slip_box: usize;
-
-        loop {
-            slip_box = rng.gen_range(0..100);
-
-            match boxes[slip_box as usize] {
-                Some(_) => continue,
-                None => {
-                    slips[slip] = Some(slip_box);
-                    boxes[slip_box] = Some(slip);
-                    break;
-                }
-            };
-        }
-    }
 
     for (prisoner, found) in prisoners.iter_mut().enumerate() {
         let mut next_box: usize = prisoner;
+
+        for _ in 0..50 {
+            let slip = boxes[next_box];
+
+            match slip == prisoner {
+                true => {
+                    *found = true;
+                    break;
+                },
+                false => next_box = slip,
+            }
+        }
+    }
+
+    prisoners.into_iter().find(|found| *found == false).is_none()
+}
+
+/// This version of the solution has two optimizations. The first is that if any of the
+/// prisoners open fifty boxes without success, the function exits early. Additionally,
+/// any previously seen slip is cached -- if the slip has been seen by a previous
+/// prisoner, and the function didn't exit early, that means that the slip is
+/// necessarily in a loop that does not contain more than fifty boxes.
+#[allow(unused)]
+fn run_optimized() -> bool {
+    let boxes = _allocate_boxes(100);
+    let mut slips_seen: Vec<bool> = (0..100).map(|_| false).collect();
+
+    for prisoner in 0..100 {
+        let mut next_box: usize = prisoner;
+
+        if slips_seen[prisoner] == true {
+            continue;
+        }
 
         for idx in 0..=50 {
             if idx == 50 {
@@ -97,21 +131,49 @@ fn run() -> bool {
                 return false;
             }
 
-            match boxes[next_box] {
-                Some(slip) => {
-                    match slip == prisoner {
-                        true => {
-                            *found = true;
-                            break;
-                        },
-                        false => {
-                            next_box = slip;
-                        }
-                    }
-                },
-                _ => {},
+            let slip = boxes[next_box];
+
+            slips_seen[slip] = true;
+            match slip == prisoner {
+                true => break,
+                false => next_box = slip,
             }
         }
+    }
+
+    true
+}
+
+/// The below function is the naive approach to the problem. Each of the prisoners picks
+/// a random box to open. They have 50 attempts to pick the box with their number in it.
+#[allow(unused)]
+fn run_naive() -> bool {
+    let mut rng = rand::thread_rng();
+
+    let boxes = _allocate_boxes(100);
+    let mut prisoners: Vec<bool> = (0..100).map(|_| false).collect();
+    let mut opened_boxes: HashSet<usize> = HashSet::with_capacity(50);
+
+    for (prisoner, found) in prisoners.iter_mut().enumerate() {
+        for _ in 0..50 {
+            let mut to_open: usize;
+
+            loop {
+                to_open = rng.gen_range(0..100);
+
+                if !opened_boxes.contains(&to_open) {
+                    opened_boxes.insert(to_open);
+                    break;
+                }
+            }
+
+            if boxes[to_open] == prisoner {
+                *found = true;
+                break;
+            }
+        }
+
+        opened_boxes.clear();
     }
 
     prisoners.iter().find(|found| **found == false).is_none()
