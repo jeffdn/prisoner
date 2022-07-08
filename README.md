@@ -13,13 +13,13 @@ See [here](https://www.youtube.com/watch?v=iSNsgj1OCLA) for the video.
 There are 100 prisoners. They are given an opportunity to be released. The conditions of
 this release are as follows:
  - each prisoner is assigned a unique number, and this number is written on a slip of
- - paper
+   paper
  - in a room, there are 100 boxes, and those slips are distributed amongst the boxes
- - randomly
+   randomly
  - each prisoner must go into the room alone, and can open 50 boxes -- if they find the
- - box with their number in it, they are a winner
+   box with their number in it, they are a winner
  - if all 100 prisoners each find the box with their number in it, all of the prisoners
- - are freed -- but if even one fails, they are all executed
+   are freed -- but if even one fails, they are all executed
  - the prisoners are allowed to coordinate a strategy before the game begins
 
 ## Solution
