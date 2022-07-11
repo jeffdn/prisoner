@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::sync::mpsc::channel;
 
 use rand::Rng;
@@ -83,14 +82,16 @@ fn _allocate_boxes(count: usize) -> Vec<usize> {
 /// with no slip getting the same box. Finally, the prisoners are iterated through,
 /// and each one gets fifty tries to find their slip, by starting with the box
 /// corresponding to their number, as described above.
-fn run() -> bool {
-    let boxes = _allocate_boxes(100);
-    let mut prisoners: Vec<bool> = (0..100).map(|_| false).collect();
+#[allow(unused)]
+fn run(count: usize) -> bool {
+    let chances = count / 2;
+    let boxes = _allocate_boxes(count);
+    let mut prisoners: Vec<bool> = (0..count).map(|_| false).collect();
 
     for (prisoner, found) in prisoners.iter_mut().enumerate() {
         let mut next_box: usize = prisoner;
 
-        for _ in 0..50 {
+        for _ in 0..chances {
             let slip = boxes[next_box];
 
             match slip == prisoner {
@@ -112,19 +113,20 @@ fn run() -> bool {
 /// prisoner, and the function didn't exit early, that means that the slip is
 /// necessarily in a loop that does not contain more than fifty boxes.
 #[allow(unused)]
-fn run_optimized() -> bool {
-    let boxes = _allocate_boxes(100);
-    let mut slips_seen: Vec<bool> = (0..100).map(|_| false).collect();
+fn run_optimized(count: usize) -> bool {
+    let chances: usize = count / 2;
+    let boxes = _allocate_boxes(count);
+    let mut slips_seen: Vec<bool> = (0..count).map(|_| false).collect();
 
-    for prisoner in 0..100 {
+    for prisoner in 0..count {
         let mut next_box: usize = prisoner;
 
         if slips_seen[prisoner] == true {
             continue;
         }
 
-        for idx in 0..=50 {
-            if idx == 50 {
+        for idx in 0..=chances {
+            if idx == chances {
                 // We are on the 51st iteration of this search. This means that there
                 // is at least one loop with greater than 50 items in it, which means
                 // that the premise of the exercise cannot be met.
@@ -147,22 +149,25 @@ fn run_optimized() -> bool {
 /// The below function is the naive approach to the problem. Each of the prisoners picks
 /// a random box to open. They have 50 attempts to pick the box with their number in it.
 #[allow(unused)]
-fn run_naive() -> bool {
+fn run_naive(count: usize) -> bool {
     let mut rng = rand::thread_rng();
 
-    let boxes = _allocate_boxes(100);
-    let mut prisoners: Vec<bool> = (0..100).map(|_| false).collect();
-    let mut opened_boxes: HashSet<usize> = HashSet::with_capacity(50);
+    let chances = count / 2;
+    let boxes = _allocate_boxes(count);
+    let mut prisoners: Vec<bool> = (0..count).map(|_| false).collect();
+    let _opened_boxes: Vec<bool> = prisoners.clone();
 
     for (prisoner, found) in prisoners.iter_mut().enumerate() {
-        for _ in 0..50 {
+        let mut opened_boxes = _opened_boxes.clone();
+
+        for _ in 0..chances {
             let mut to_open: usize;
 
             loop {
-                to_open = rng.gen_range(0..100);
+                to_open = rng.gen_range(0..count);
 
-                if !opened_boxes.contains(&to_open) {
-                    opened_boxes.insert(to_open);
+                if !opened_boxes[to_open] {
+                    opened_boxes[to_open] = true;
                     break;
                 }
             }
@@ -172,8 +177,6 @@ fn run_naive() -> bool {
                 break;
             }
         }
-
-        opened_boxes.clear();
     }
 
     prisoners.iter().find(|found| **found == false).is_none()
@@ -182,12 +185,12 @@ fn run_naive() -> bool {
 fn main() {
     let pool = ThreadPool::new(16);
     let (tx, rx) = channel();
-    let runs: u32 = 10_000_000;
+    let runs: u32 = 1_000_000;
 
     for _ in 0..runs {
         let tx = tx.clone();
 
-        pool.execute(move || tx.send(run() as u32).unwrap());
+        pool.execute(move || tx.send(run_naive(100) as u32).unwrap());
     }
 
     let wins: u32 = rx.iter().take(runs as usize).fold(0, |a, b| a + b);
