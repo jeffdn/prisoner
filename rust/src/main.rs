@@ -8,7 +8,7 @@ fn _allocate_boxes(count: usize) -> Vec<usize> {
 
     // There are `count` numbered slips and `count` numbered boxes, one for each
     // prisoner, and each slip is randomly placed in a box.
-    let mut boxes: Vec<Option<usize>> = (0..count).map(|_| None).collect();
+    let mut boxes: Vec<Option<usize>> = vec![None; count];
 
     for slip in 0..count {
         let mut slip_box: usize;
@@ -16,13 +16,10 @@ fn _allocate_boxes(count: usize) -> Vec<usize> {
         loop {
             slip_box = rng.gen_range(0..count);
 
-            match boxes[slip_box as usize] {
-                Some(_) => continue,
-                None => {
-                    boxes[slip_box] = Some(slip);
-                    break;
-                }
-            };
+            if let None = boxes[slip_box] {
+                boxes[slip_box] = Some(slip);
+                break;
+            }
         }
     }
 
@@ -83,10 +80,9 @@ fn _allocate_boxes(count: usize) -> Vec<usize> {
 /// and each one gets fifty tries to find their slip, by starting with the box
 /// corresponding to their number, as described above.
 #[allow(unused)]
-fn run(count: usize) -> bool {
-    let chances = count / 2;
+fn run(count: usize, chances: usize) -> bool {
     let boxes = _allocate_boxes(count);
-    let mut prisoners: Vec<bool> = (0..count).map(|_| false).collect();
+    let mut prisoners: Vec<bool> = vec![false; count];
 
     for (prisoner, found) in prisoners.iter_mut().enumerate() {
         let mut next_box: usize = prisoner;
@@ -113,10 +109,9 @@ fn run(count: usize) -> bool {
 /// prisoner, and the function didn't exit early, that means that the slip is
 /// necessarily in a loop that does not contain more than fifty boxes.
 #[allow(unused)]
-fn run_optimized(count: usize) -> bool {
-    let chances: usize = count / 2;
+fn run_optimized(count: usize, chances: usize) -> bool {
     let boxes = _allocate_boxes(count);
-    let mut slips_seen: Vec<bool> = (0..count).map(|_| false).collect();
+    let mut slips_seen: Vec<bool> = vec![false; count];
 
     for prisoner in 0..count {
         let mut next_box: usize = prisoner;
@@ -149,17 +144,14 @@ fn run_optimized(count: usize) -> bool {
 /// The below function is the naive approach to the problem. Each of the prisoners picks
 /// a random box to open. They have 50 attempts to pick the box with their number in it.
 #[allow(unused)]
-fn run_naive(count: usize) -> bool {
+fn run_naive(count: usize, chances: usize) -> bool {
     let mut rng = rand::thread_rng();
 
-    let chances = count / 2;
     let boxes = _allocate_boxes(count);
-    let mut prisoners: Vec<bool> = (0..count).map(|_| false).collect();
-    let _opened_boxes: Vec<bool> = prisoners.clone();
+    let mut prisoners: Vec<bool> = vec![false; count];
+    let mut opened_boxes: Vec<bool> = prisoners.clone();
 
     for (prisoner, found) in prisoners.iter_mut().enumerate() {
-        let mut opened_boxes = _opened_boxes.clone();
-
         for _ in 0..chances {
             let mut to_open: usize;
 
@@ -177,20 +169,63 @@ fn run_naive(count: usize) -> bool {
                 break;
             }
         }
+
+        opened_boxes.fill(false);
     }
 
     prisoners.iter().find(|found| **found == false).is_none()
 }
 
+/// The below function is an optimized version of the naive logic.
+#[allow(unused)]
+fn run_naive_optimized(count: usize, chances: usize) -> bool {
+    let mut rng = rand::thread_rng();
+
+    let boxes = _allocate_boxes(count);
+    let mut opened_boxes: Vec<bool> = vec![false; count];
+
+    for prisoner in 0..count {
+        for idx in 0..=chances {
+            let mut to_open: usize;
+
+            if idx == chances {
+                // No need to continue -- one prisoner has failed, so they all have.
+                return false;
+            }
+
+            loop {
+                to_open = rng.gen_range(0..count);
+
+                if !opened_boxes[to_open] {
+                    opened_boxes[to_open] = true;
+                    break;
+                }
+            }
+
+            if boxes[to_open] == prisoner {
+                break;
+            }
+        }
+
+        opened_boxes.fill(false);
+    }
+
+    true
+}
+
 fn main() {
     let pool = ThreadPool::new(16);
     let (tx, rx) = channel();
-    let runs: u32 = 1_000_000;
+    let runs: u32 = 10_000_000;
 
-    for _ in 0..runs {
+    for _ in 0..16 {
         let tx = tx.clone();
 
-        pool.execute(move || tx.send(run_naive(100) as u32).unwrap());
+        pool.execute(move || {
+            for _ in 0..(runs / 16) {
+                tx.send(run_optimized(30, 15) as u32).unwrap()
+            }
+        });
     }
 
     let wins: u32 = rx.iter().take(runs as usize).fold(0, |a, b| a + b);

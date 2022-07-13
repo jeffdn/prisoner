@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
     }
 
     printf(
-        "completed! %u runs had %u wins (%.2f%%)\n",
+        "completed! of %u runs, %u were successful (%.2f%%)\n",
         runs,
         wins,
         ((double) wins / (double) runs) * 100
