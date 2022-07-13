@@ -49,6 +49,9 @@ bool run_optimized(unsigned int count) {
 
         for (unsigned int _i = 0; _i <= chances; _i++) {
             if (_i == chances) {
+                free(boxes);
+                free(slips_seen);
+
                 return false;
             }
 
@@ -62,6 +65,9 @@ bool run_optimized(unsigned int count) {
             next_box = slip;
         }
     }
+
+    free(boxes);
+    free(slips_seen);
 
     return true;
 }

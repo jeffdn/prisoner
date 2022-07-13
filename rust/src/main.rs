@@ -100,7 +100,7 @@ fn run(count: usize, chances: usize) -> bool {
         }
     }
 
-    prisoners.into_iter().find(|found| *found == false).is_none()
+    prisoners.into_iter().all(|found| found)
 }
 
 /// This version of the solution has two optimizations. The first is that if any of the
@@ -173,7 +173,7 @@ fn run_naive(count: usize, chances: usize) -> bool {
         opened_boxes.fill(false);
     }
 
-    prisoners.iter().find(|found| **found == false).is_none()
+    prisoners.into_iter().all(|found| found)
 }
 
 /// The below function is an optimized version of the naive logic.
