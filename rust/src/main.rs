@@ -1,6 +1,6 @@
 use std::sync::mpsc::channel;
 
-use rand::Rng;
+use rand::{seq::SliceRandom, Rng};
 use threadpool::ThreadPool;
 
 fn _allocate_boxes(count: usize) -> Vec<usize> {
@@ -8,22 +8,12 @@ fn _allocate_boxes(count: usize) -> Vec<usize> {
 
     // There are `count` numbered slips and `count` numbered boxes, one for each
     // prisoner, and each slip is randomly placed in a box.
-    let mut boxes: Vec<Option<usize>> = vec![None; count];
+    let mut boxes: Vec<usize> = (0..count).collect();
 
-    for slip in 0..count {
-        let mut slip_box: usize;
+    // Distrubte the slips randomly amongst the boxes.
+    boxes.shuffle(&mut rng);
 
-        loop {
-            slip_box = rng.gen_range(0..count);
-
-            if let None = boxes[slip_box] {
-                boxes[slip_box] = Some(slip);
-                break;
-            }
-        }
-    }
-
-    boxes.into_iter().map(|slip| slip.unwrap()).collect()
+    boxes
 }
 
 /// There are 100 prisoners. They are given an opportunity to be released. The
@@ -223,7 +213,7 @@ fn main() {
 
         pool.execute(move || {
             for _ in 0..(runs / 16) {
-                tx.send(run_optimized(30, 15) as u32).unwrap()
+                tx.send(run_optimized(100, 50) as u32).unwrap()
             }
         });
     }

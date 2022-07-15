@@ -2,15 +2,8 @@ import random
 from typing import List
 
 def _generate_boxes(count: int) -> List[int]:
-    boxes = [None for _ in range(count)]
-
-    for slip in range(count):
-        while True:
-            slip_box = random.randint(0, count - 1)
-
-            if boxes[slip_box] == None:
-                boxes[slip_box] = slip
-                break
+    boxes = [x for x in range(count)]
+    random.shuffle(boxes)
 
     return boxes
 

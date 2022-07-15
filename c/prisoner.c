@@ -17,17 +17,18 @@ unsigned int *_generate_boxes(unsigned int count) {
     size_t size = count * sizeof(unsigned int);
     unsigned int *boxes = malloc(size);
 
-    memset(boxes, UINT_MAX, size);
-
+    // First, populate the boxes with their corresponding slip.
     for (unsigned int slip = 0; slip < count; slip++) {
-        while (1) {
-            unsigned int slip_box = _generate_range(count);
+        boxes[slip] = slip;
+    }
 
-            if (boxes[slip_box] == UINT_MAX) {
-                boxes[slip_box] = slip;
-                break;
-            }
-        }
+    // Now, redistribute the slips randomly.
+    for (unsigned int i = count; i > 0; i--) {
+        unsigned int to_swap = _generate_range(i + 1);
+        unsigned int left = boxes[i], right = boxes[to_swap];
+
+        boxes[to_swap] = left;
+        boxes[i] = right;
     }
 
     return boxes;
