@@ -8,15 +8,15 @@
 #include <string.h>
 
 
+static unsigned int *boxes = NULL;
+static bool *slips_seen = NULL;
+
 unsigned int _generate_range(unsigned int max) {
     return rand() % max;
 }
 
 
 unsigned int *_generate_boxes(unsigned int count) {
-    size_t size = count * sizeof(unsigned int);
-    unsigned int *boxes = malloc(size);
-
     // First, populate the boxes with their corresponding slip.
     for (unsigned int slip = 0; slip < count; slip++) {
         boxes[slip] = slip;
@@ -37,8 +37,7 @@ unsigned int *_generate_boxes(unsigned int count) {
 
 bool run_optimized(unsigned int count) {
     unsigned int chances = count / 2;
-    unsigned int *boxes = _generate_boxes(100);
-    bool *slips_seen = malloc(count * sizeof(bool));
+
     memset(slips_seen, false, count * sizeof(bool));
 
     for (unsigned int prisoner = 0; prisoner < count; prisoner++) {
@@ -50,9 +49,6 @@ bool run_optimized(unsigned int count) {
 
         for (unsigned int _i = 0; _i <= chances; _i++) {
             if (_i == chances) {
-                free(boxes);
-                free(slips_seen);
-
                 return false;
             }
 
@@ -67,16 +63,19 @@ bool run_optimized(unsigned int count) {
         }
     }
 
-    free(boxes);
-    free(slips_seen);
-
     return true;
 }
 
 int main(int argc, char **argv) {
+    unsigned int count = 100;
+    size_t size = count * sizeof(unsigned int);
+
+    boxes = malloc(size);
+    slips_seen = malloc(size);
+
     srand(time(NULL));
 
-    unsigned int runs = 1000000, wins = 0;
+    unsigned int runs = 10 * 1000 * 1000, wins = 0;
 
     for (int i = 0; i < runs; i++) {
         wins += (unsigned int) run_optimized(100);
@@ -88,6 +87,9 @@ int main(int argc, char **argv) {
         wins,
         ((double) wins / (double) runs) * 100
     );
+
+    free(boxes);
+    free(slips_seen);
 
     return 0;
 }

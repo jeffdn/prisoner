@@ -3,17 +3,17 @@ use std::sync::mpsc::channel;
 use rand::{seq::SliceRandom, Rng};
 use threadpool::ThreadPool;
 
-fn _allocate_boxes(count: usize) -> Vec<usize> {
+fn _allocate_boxes(boxes: &mut Vec<usize>) {
     let mut rng = rand::thread_rng();
 
     // There are `count` numbered slips and `count` numbered boxes, one for each
     // prisoner, and each slip is randomly placed in a box.
-    let mut boxes: Vec<usize> = (0..count).collect();
+    for (idx, empty_box) in boxes.iter_mut().enumerate() {
+        *empty_box = idx;
+    }
 
     // Distrubte the slips randomly amongst the boxes.
     boxes.shuffle(&mut rng);
-
-    boxes
 }
 
 /// There are 100 prisoners. They are given an opportunity to be released. The
@@ -70,8 +70,7 @@ fn _allocate_boxes(count: usize) -> Vec<usize> {
 /// and each one gets fifty tries to find their slip, by starting with the box
 /// corresponding to their number, as described above.
 #[allow(unused)]
-fn run(count: usize, chances: usize) -> bool {
-    let boxes = _allocate_boxes(count);
+fn run(boxes: &Vec<usize>, count: usize, chances: usize) -> bool {
     let mut prisoners: Vec<bool> = vec![false; count];
 
     for (prisoner, found) in prisoners.iter_mut().enumerate() {
@@ -99,8 +98,7 @@ fn run(count: usize, chances: usize) -> bool {
 /// prisoner, and the function didn't exit early, that means that the slip is
 /// necessarily in a loop that does not contain more than fifty boxes.
 #[allow(unused)]
-fn run_optimized(count: usize, chances: usize) -> bool {
-    let boxes = _allocate_boxes(count);
+fn run_optimized(boxes: &Vec<usize>, count: usize, chances: usize) -> bool {
     let mut slips_seen: Vec<bool> = vec![false; count];
 
     for prisoner in 0..count {
@@ -134,10 +132,9 @@ fn run_optimized(count: usize, chances: usize) -> bool {
 /// The below function is the naive approach to the problem. Each of the prisoners picks
 /// a random box to open. They have 50 attempts to pick the box with their number in it.
 #[allow(unused)]
-fn run_naive(count: usize, chances: usize) -> bool {
+fn run_naive(boxes: &Vec<usize>, count: usize, chances: usize) -> bool {
     let mut rng = rand::thread_rng();
 
-    let boxes = _allocate_boxes(count);
     let mut prisoners: Vec<bool> = vec![false; count];
     let mut opened_boxes: Vec<bool> = prisoners.clone();
 
@@ -168,57 +165,58 @@ fn run_naive(count: usize, chances: usize) -> bool {
 
 /// The below function is an optimized version of the naive logic.
 #[allow(unused)]
-fn run_naive_optimized(count: usize, chances: usize) -> bool {
+fn run_naive_optimized(boxes: &Vec<usize>, count: usize, chances: usize) -> bool {
     let mut rng = rand::thread_rng();
 
-    let boxes = _allocate_boxes(count);
-    let mut opened_boxes: Vec<bool> = vec![false; count];
+    let mut to_open: Vec<usize> = boxes.clone();
 
     for prisoner in 0..count {
-        for idx in 0..=chances {
-            let mut to_open: usize;
+        to_open.shuffle(&mut rng);
 
+        for idx in 0..=chances {
             if idx == chances {
                 // No need to continue -- one prisoner has failed, so they all have.
                 return false;
             }
 
-            loop {
-                to_open = rng.gen_range(0..count);
-
-                if !opened_boxes[to_open] {
-                    opened_boxes[to_open] = true;
-                    break;
-                }
-            }
-
-            if boxes[to_open] == prisoner {
+            if to_open[idx] == prisoner {
                 break;
             }
         }
-
-        opened_boxes.fill(false);
     }
 
     true
 }
 
 fn main() {
+    let threads: u32 = 16;
     let pool = ThreadPool::new(16);
     let (tx, rx) = channel();
     let runs: u32 = 10_000_000;
+    let count: usize = 100;
+    let chances: usize = 50;
 
-    for _ in 0..16 {
+    for i in 0..threads {
         let tx = tx.clone();
+        let to_execute = match i + 1 == threads {
+            true => (runs / threads) + (runs % threads),
+            false => runs / threads,
+        };
 
         pool.execute(move || {
-            for _ in 0..(runs / 16) {
-                tx.send(run_optimized(100, 50) as u32).unwrap()
+            let mut wins: u32 = 0;
+            let mut boxes: Vec<usize> = (0..count).collect();
+
+            for _ in 0..to_execute {
+                _allocate_boxes(&mut boxes);
+                wins += run_optimized(&boxes, count, chances) as u32;
             }
+
+            tx.send(wins).unwrap();
         });
     }
 
-    let wins: u32 = rx.iter().take(runs as usize).fold(0, |a, b| a + b);
+    let wins: u32 = rx.iter().take(threads as usize).fold(0, |a, b| a + b);
 
     println!(
         "complete! of {:} runs, {:} were successful ({:.2}%)",
