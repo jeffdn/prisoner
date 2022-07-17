@@ -1,7 +1,27 @@
 use std::sync::mpsc::channel;
+use std::time::Instant;
 
+use clap::Parser;
 use rand::{seq::SliceRandom, Rng};
 use threadpool::ThreadPool;
+
+#[derive(Parser)]
+struct Args {
+    #[clap(short, long, value_parser, default_value_t = String::from("solved"))]
+    version: String,
+
+    #[clap(short, long, action, default_value_t = false)]
+    optimized: bool,
+
+    #[clap(short, long, value_parser, default_value_t = 100)]
+    prisoners: usize,
+
+    #[clap(short, long, value_parser, default_value_t = 50)]
+    chances: usize,
+
+    #[clap(short, long, value_parser, default_value_t = 1_000_000)]
+    iterations: usize,
+}
 
 fn _allocate_boxes(boxes: &mut Vec<usize>) {
     let mut rng = rand::thread_rng();
@@ -189,27 +209,35 @@ fn run_naive_optimized(boxes: &Vec<usize>, count: usize, chances: usize) -> bool
 }
 
 fn main() {
-    let threads: u32 = 16;
+    let threads: usize = 16;
     let pool = ThreadPool::new(16);
     let (tx, rx) = channel();
-    let runs: u32 = 10_000_000;
-    let count: usize = 100;
-    let chances: usize = 50;
+
+    let args = Args::parse();
+
+    let handler = match (&args.version[..], args.optimized) {
+        ("naive", false) => run_naive,
+        ("solved", true) => run_optimized,
+        (_, true) => run_naive_optimized,
+        (_, false) => run,
+    };
+
+    let start = Instant::now();
 
     for i in 0..threads {
         let tx = tx.clone();
         let to_execute = match i + 1 == threads {
-            true => (runs / threads) + (runs % threads),
-            false => runs / threads,
+            true => (args.iterations / threads) + (args.iterations % threads),
+            false => args.iterations / threads,
         };
 
         pool.execute(move || {
             let mut wins: u32 = 0;
-            let mut boxes: Vec<usize> = (0..count).collect();
+            let mut boxes: Vec<usize> = (0..args.prisoners).collect();
 
             for _ in 0..to_execute {
                 _allocate_boxes(&mut boxes);
-                wins += run_optimized(&boxes, count, chances) as u32;
+                wins += handler(&boxes, args.prisoners, args.chances) as u32;
             }
 
             tx.send(wins).unwrap();
@@ -218,10 +246,13 @@ fn main() {
 
     let wins: u32 = rx.iter().take(threads as usize).fold(0, |a, b| a + b);
 
+    let finished = start.elapsed();
+
     println!(
-        "complete! of {:} runs, {:} were successful ({:.2}%)",
-        runs,
+        "complete in {:.3} seconds! of {} runs, {} were successful ({:.2}%)",
+        finished.as_millis() as f32 / 1000 as f32,
+        args.iterations,
         wins,
-        (wins as f32 / runs as f32) * 100.0,
+        (wins as f32 / args.iterations as f32) * 100.0,
     );
 }
