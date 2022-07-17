@@ -217,9 +217,9 @@ fn main() {
 
     let handler = match (&args.version[..], args.optimized) {
         ("naive", false) => run_naive,
-        ("solved", true) => run_optimized,
-        (_, true) => run_naive_optimized,
+        ("naive", true) => run_naive_optimized,
         (_, false) => run,
+        (_, true) => run_optimized,
     };
 
     let start = Instant::now();
