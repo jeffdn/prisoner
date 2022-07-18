@@ -24,7 +24,7 @@ def run_optimized(count: int) -> bool:
                 return False
 
             slip = boxes[next_box]
-            slips_seen[prisoner] = True
+            slips_seen[slip] = True
 
             if slip == prisoner:
                 break
