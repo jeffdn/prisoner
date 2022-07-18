@@ -1,10 +1,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
 #include <stdbool.h>
-#include <stdint.h>
-#include <stddef.h>
 #include <string.h>
 
 
@@ -16,28 +13,24 @@ unsigned int _generate_range(unsigned int max) {
 }
 
 
-unsigned int *_generate_boxes(unsigned int count) {
+void _generate_boxes(unsigned int count) {
     // First, populate the boxes with their corresponding slip.
     for (unsigned int slip = 0; slip < count; slip++) {
         boxes[slip] = slip;
     }
 
     // Now, redistribute the slips randomly.
-    for (unsigned int i = count; i > 0; i--) {
+    for (unsigned int i = count - 1; i > 0; i--) {
         unsigned int to_swap = _generate_range(i + 1);
         unsigned int left = boxes[i], right = boxes[to_swap];
 
         boxes[to_swap] = left;
         boxes[i] = right;
     }
-
-    return boxes;
 }
 
 
-bool run_optimized(unsigned int count) {
-    unsigned int chances = count / 2;
-
+bool run_optimized(unsigned int count, unsigned int chances) {
     memset(slips_seen, false, count * sizeof(bool));
 
     for (unsigned int prisoner = 0; prisoner < count; prisoner++) {
@@ -67,22 +60,40 @@ bool run_optimized(unsigned int count) {
 }
 
 int main(int argc, char **argv) {
-    unsigned int count = 100;
+    unsigned int count = 100, chances = 50;
     size_t size = count * sizeof(unsigned int);
+    struct timespec start_ts, end_ts, diff_ts;
+    float duration;
 
     boxes = malloc(size);
     slips_seen = malloc(size);
 
     srand(time(NULL));
 
-    unsigned int runs = 10 * 1000 * 1000, wins = 0;
+    unsigned int runs = 1 * 1000 * 1000, wins = 0;
+
+    timespec_get(&start_ts, TIME_UTC);
 
     for (int i = 0; i < runs; i++) {
-        wins += (unsigned int) run_optimized(100);
+        _generate_boxes(count);
+        wins += (unsigned int) run_optimized(count, chances);
     }
 
+    timespec_get(&end_ts, TIME_UTC);
+
+    diff_ts.tv_sec = end_ts.tv_sec - start_ts.tv_sec;
+    diff_ts.tv_nsec = end_ts.tv_nsec - start_ts.tv_nsec;
+
+    if ((end_ts.tv_nsec - start_ts.tv_nsec) < 0) {
+        diff_ts.tv_sec -= 1;
+        diff_ts.tv_nsec += 1000000000;
+    }
+
+    duration = diff_ts.tv_sec + ((float) diff_ts.tv_nsec / 1000000000);
+
     printf(
-        "completed! of %u runs, %u were successful (%.2f%%)\n",
+        "complete in %.3f seconds! of %u runs, %u were successful (%.2f%%)\n",
+        duration,
         runs,
         wins,
         ((double) wins / (double) runs) * 100
