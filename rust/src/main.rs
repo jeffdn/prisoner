@@ -1,3 +1,4 @@
+use std::fmt;
 use std::sync::mpsc::channel;
 use std::time::Instant;
 
@@ -21,6 +22,21 @@ struct Args {
 
     #[clap(short, long, value_parser, default_value_t = 1_000_000)]
     iterations: usize,
+}
+
+impl fmt::Display for Args {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "executing method {} (optimized: {}) with:\n \
+            - {} iterations\n - {} prisoners\n - {} chances",
+            self.version,
+            self.optimized,
+            self.iterations,
+            self.prisoners,
+            self.chances,
+        )
+    }
 }
 
 fn _allocate_boxes(boxes: &mut Vec<usize>) {
