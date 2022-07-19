@@ -185,8 +185,6 @@ fn run_optimized(setup: &mut Setup) -> bool {
 /// The below function is the naive approach to the problem. Each of the prisoners picks
 /// a random box to open. They have 50 attempts to pick the box with their number in it.
 fn run_naive(setup: &mut Setup) -> bool {
-    let mut rng = rand::thread_rng();
-
     let mut prisoners: Vec<bool> = vec![false; setup.count];
     let mut opened_boxes: Vec<bool> = prisoners.clone();
 
@@ -195,7 +193,7 @@ fn run_naive(setup: &mut Setup) -> bool {
             let mut to_open: usize;
 
             loop {
-                to_open = rng.gen_range(0..setup.count);
+                to_open = setup.rng.gen_range(0..setup.count);
 
                 if !opened_boxes[to_open] {
                     opened_boxes[to_open] = true;
@@ -217,12 +215,10 @@ fn run_naive(setup: &mut Setup) -> bool {
 
 /// The below function is an optimized version of the naive logic.
 fn run_naive_optimized(setup: &mut Setup) -> bool {
-    let mut rng = rand::thread_rng();
-
     let mut to_open: Vec<usize> = setup.boxes.clone();
 
     for prisoner in 0..setup.count {
-        to_open.shuffle(&mut rng);
+        to_open.shuffle(&mut setup.rng);
 
         for idx in 0..=setup.chances {
             if idx == setup.chances {
