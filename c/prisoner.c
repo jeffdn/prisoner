@@ -14,11 +14,6 @@ unsigned int _generate_range(unsigned int max) {
 
 
 void _generate_boxes(unsigned int count) {
-    // First, populate the boxes with their corresponding slip.
-    for (unsigned int slip = 0; slip < count; slip++) {
-        boxes[slip] = slip;
-    }
-
     // Now, redistribute the slips randomly.
     for (unsigned int i = count - 1; i > 0; i--) {
         unsigned int to_swap = _generate_range(i + 1);
@@ -73,6 +68,11 @@ int main(int argc, char **argv) {
     unsigned int runs = 1 * 1000 * 1000, wins = 0;
 
     timespec_get(&start_ts, TIME_UTC);
+
+    // First, populate the boxes with their corresponding slip.
+    for (unsigned int slip = 0; slip < count; slip++) {
+        boxes[slip] = slip;
+    }
 
     for (int i = 0; i < runs; i++) {
         _generate_boxes(count);

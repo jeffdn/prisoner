@@ -6,7 +6,7 @@ use clap::Parser;
 use rand::{seq::SliceRandom, Rng};
 use threadpool::ThreadPool;
 
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 struct Args {
     #[clap(short, long, value_parser, default_value_t = String::from("solved"))]
     version: String,
@@ -39,17 +39,38 @@ impl fmt::Display for Args {
     }
 }
 
-fn _allocate_boxes(boxes: &mut Vec<usize>) {
-    let mut rng = rand::thread_rng();
+struct Setup {
+    pub boxes: Vec<usize>,
+    pub slips_seen: Vec<bool>,
 
-    // There are `count` numbered slips and `count` numbered boxes, one for each
-    // prisoner, and each slip is randomly placed in a box.
-    for (idx, empty_box) in boxes.iter_mut().enumerate() {
-        *empty_box = idx;
+    pub count: usize,
+    pub chances: usize,
+
+    rng: rand::rngs::ThreadRng,
+}
+
+impl Setup {
+    fn new(args: &Args) -> Setup {
+        // There are `count` numbered slips and `count` numbered boxes, one for each
+        // prisoner, and each slip is randomly placed in a box.
+        let slips_seen: Vec<bool> = match args.optimized {
+            true => vec![false; args.prisoners],
+            false => vec![],
+        };
+
+        Setup {
+            boxes: (0..args.prisoners).collect(),
+            slips_seen,
+            count: args.prisoners,
+            chances: args.chances,
+            rng: rand::thread_rng(),
+        }
     }
 
-    // Distrubte the slips randomly amongst the boxes.
-    boxes.shuffle(&mut rng);
+    fn reset(&mut self) {
+        self.boxes.shuffle(&mut self.rng);
+        self.slips_seen.fill(false);
+    }
 }
 
 /// There are 100 prisoners. They are given an opportunity to be released. The
@@ -105,15 +126,14 @@ fn _allocate_boxes(boxes: &mut Vec<usize>) {
 /// with no slip getting the same box. Finally, the prisoners are iterated through,
 /// and each one gets fifty tries to find their slip, by starting with the box
 /// corresponding to their number, as described above.
-#[allow(unused)]
-fn run(boxes: &Vec<usize>, count: usize, chances: usize) -> bool {
-    let mut prisoners: Vec<bool> = vec![false; count];
+fn run(setup: &mut Setup) -> bool {
+    let mut prisoners: Vec<bool> = vec![false; setup.count];
 
     for (prisoner, found) in prisoners.iter_mut().enumerate() {
         let mut next_box: usize = prisoner;
 
-        for _ in 0..chances {
-            let slip = boxes[next_box];
+        for _ in 0..setup.chances {
+            let slip = setup.boxes[next_box];
 
             match slip == prisoner {
                 true => {
@@ -133,28 +153,25 @@ fn run(boxes: &Vec<usize>, count: usize, chances: usize) -> bool {
 /// any previously seen slip is cached -- if the slip has been seen by a previous
 /// prisoner, and the function didn't exit early, that means that the slip is
 /// necessarily in a loop that does not contain more than fifty boxes.
-#[allow(unused)]
-fn run_optimized(boxes: &Vec<usize>, count: usize, chances: usize) -> bool {
-    let mut slips_seen: Vec<bool> = vec![false; count];
-
-    for prisoner in 0..count {
+fn run_optimized(setup: &mut Setup) -> bool {
+    for prisoner in 0..setup.count {
         let mut next_box: usize = prisoner;
 
-        if slips_seen[prisoner] == true {
+        if setup.slips_seen[prisoner] == true {
             continue;
         }
 
-        for idx in 0..=chances {
-            if idx == chances {
+        for idx in 0..=setup.chances {
+            if idx == setup.chances {
                 // We are on the 51st iteration of this search. This means that there
                 // is at least one loop with greater than 50 items in it, which means
                 // that the premise of the exercise cannot be met.
                 return false;
             }
 
-            let slip = boxes[next_box];
+            let slip = setup.boxes[next_box];
 
-            slips_seen[slip] = true;
+            setup.slips_seen[slip] = true;
             match slip == prisoner {
                 true => break,
                 false => next_box = slip,
@@ -167,19 +184,18 @@ fn run_optimized(boxes: &Vec<usize>, count: usize, chances: usize) -> bool {
 
 /// The below function is the naive approach to the problem. Each of the prisoners picks
 /// a random box to open. They have 50 attempts to pick the box with their number in it.
-#[allow(unused)]
-fn run_naive(boxes: &Vec<usize>, count: usize, chances: usize) -> bool {
+fn run_naive(setup: &mut Setup) -> bool {
     let mut rng = rand::thread_rng();
 
-    let mut prisoners: Vec<bool> = vec![false; count];
+    let mut prisoners: Vec<bool> = vec![false; setup.count];
     let mut opened_boxes: Vec<bool> = prisoners.clone();
 
     for (prisoner, found) in prisoners.iter_mut().enumerate() {
-        for _ in 0..chances {
+        for _ in 0..setup.chances {
             let mut to_open: usize;
 
             loop {
-                to_open = rng.gen_range(0..count);
+                to_open = rng.gen_range(0..setup.count);
 
                 if !opened_boxes[to_open] {
                     opened_boxes[to_open] = true;
@@ -187,7 +203,7 @@ fn run_naive(boxes: &Vec<usize>, count: usize, chances: usize) -> bool {
                 }
             }
 
-            if boxes[to_open] == prisoner {
+            if setup.boxes[to_open] == prisoner {
                 *found = true;
                 break;
             }
@@ -200,17 +216,16 @@ fn run_naive(boxes: &Vec<usize>, count: usize, chances: usize) -> bool {
 }
 
 /// The below function is an optimized version of the naive logic.
-#[allow(unused)]
-fn run_naive_optimized(boxes: &Vec<usize>, count: usize, chances: usize) -> bool {
+fn run_naive_optimized(setup: &mut Setup) -> bool {
     let mut rng = rand::thread_rng();
 
-    let mut to_open: Vec<usize> = boxes.clone();
+    let mut to_open: Vec<usize> = setup.boxes.clone();
 
-    for prisoner in 0..count {
+    for prisoner in 0..setup.count {
         to_open.shuffle(&mut rng);
 
-        for idx in 0..=chances {
-            if idx == chances {
+        for idx in 0..=setup.chances {
+            if idx == setup.chances {
                 // No need to continue -- one prisoner has failed, so they all have.
                 return false;
             }
@@ -242,6 +257,7 @@ fn main() {
 
     for i in 0..threads {
         let tx = tx.clone();
+        let args = args.clone();
         let to_execute = match i + 1 == threads {
             true => (args.iterations / threads) + (args.iterations % threads),
             false => args.iterations / threads,
@@ -249,11 +265,12 @@ fn main() {
 
         pool.execute(move || {
             let mut wins: u32 = 0;
-            let mut boxes: Vec<usize> = (0..args.prisoners).collect();
+            let mut setup: Setup = Setup::new(&args);
 
             for _ in 0..to_execute {
-                _allocate_boxes(&mut boxes);
-                wins += handler(&boxes, args.prisoners, args.chances) as u32;
+                setup.reset();
+
+                wins += handler(&mut setup) as u32;
             }
 
             tx.send(wins).unwrap();
@@ -271,4 +288,96 @@ fn main() {
         wins,
         (wins as f32 / args.iterations as f32) * 100.0,
     );
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_run_success_known_layout() {
+        // Use the box layout from the documentation above.
+        let mut setup = Setup {
+            boxes: vec![4, 3, 9, 2, 7, 8, 6, 5, 0, 1],
+            slips_seen: vec![],
+            count: 10,
+            chances: 5,
+            rng: rand::thread_rng(),
+        };
+
+        assert!(run(&mut setup));
+    }
+
+    #[test]
+    fn test_run_failure_known_layout() {
+        // If the box layout contains a loop longer than n-chances, they always fail.
+        let mut setup = Setup {
+            boxes: vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 0],
+            slips_seen: vec![],
+            count: 10,
+            chances: 5,
+            rng: rand::thread_rng(),
+        };
+
+        assert_eq!(run(&mut setup), false);
+    }
+
+    #[test]
+    fn test_run_optimized_success_known_layout() {
+        // Use the box layout from the documentation above.
+        let mut setup = Setup {
+            boxes: vec![4, 3, 9, 2, 7, 8, 6, 5, 0, 1],
+            slips_seen: vec![false; 10],
+            count: 10,
+            chances: 5,
+            rng: rand::thread_rng(),
+        };
+
+        assert!(run_optimized(&mut setup));
+    }
+
+    #[test]
+    fn test_run_optimized_failure_known_layout() {
+        // If the box layout contains a loop longer than n-chances, they always fail.
+        let mut setup = Setup {
+            boxes: vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 0],
+            slips_seen: vec![false; 10],
+            count: 10,
+            chances: 5,
+            rng: rand::thread_rng(),
+        };
+
+        assert_eq!(run_optimized(&mut setup), false);
+    }
+
+    #[test]
+    fn test_run_naive_success_known_layout() {
+        // Use the box layout from the documentation above. If the prisoner gets
+        // chances = count, they will always win.
+        let mut setup = Setup {
+            boxes: vec![4, 3, 9, 2, 7, 8, 6, 5, 0, 1],
+            slips_seen: vec![],
+            count: 10,
+            chances: 10,
+            rng: rand::thread_rng(),
+        };
+
+        assert!(run_naive(&mut setup));
+    }
+
+    #[test]
+    fn test_run_naive_optimized_success_known_layout() {
+        // Use the box layout from the documentation above. If the prisoner gets
+        // chances = count, they will always win.
+        let mut setup = Setup {
+            boxes: vec![4, 3, 9, 2, 7, 8, 6, 5, 0, 1],
+            slips_seen: vec![],
+            count: 10,
+            chances: 10,
+            rng: rand::thread_rng(),
+        };
+
+        assert!(run_naive_optimized(&mut setup));
+    }
 }
