@@ -1,16 +1,12 @@
 import random
 from typing import List
 
-def _generate_boxes(count: int) -> List[int]:
-    boxes = [x for x in range(count)]
-    random.shuffle(boxes)
-
-    return boxes
+BOXES = None
 
 
 def run_optimized(count: int) -> bool:
     chances = int(count / 2)
-    boxes = _generate_boxes(count)
+    random.shuffle(BOXES)
     slips_seen = [False for _ in range(count)]
 
     for prisoner in range(count):
@@ -23,7 +19,7 @@ def run_optimized(count: int) -> bool:
             if idx == chances:
                 return False
 
-            slip = boxes[next_box]
+            slip = BOXES[next_box]
             slips_seen[slip] = True
 
             if slip == prisoner:
@@ -35,10 +31,13 @@ def run_optimized(count: int) -> bool:
 
 
 if __name__ == '__main__':
+    count = 100
     runs = 100_000
     wins = 0
 
+    BOXES = [x for x in range(count)]
+
     for _ in range(runs):
-        wins += int(run_optimized(100))
+        wins += int(run_optimized(count))
 
     print(f'completed! of {runs:,} runs, {wins:,} were successful ({(wins / runs) * 100:.2f}%)')
