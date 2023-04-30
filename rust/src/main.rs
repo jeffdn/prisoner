@@ -3,7 +3,7 @@ use std::sync::mpsc::channel;
 use std::time::Instant;
 
 use clap::Parser;
-use rand::{seq::SliceRandom, Rng};
+use rand::{rngs::SmallRng, seq::SliceRandom, Rng, SeedableRng};
 use threadpool::ThreadPool;
 
 #[derive(Parser, Clone)]
@@ -30,11 +30,7 @@ impl fmt::Display for Args {
             f,
             "executing method {} (optimized: {}) with:\n \
             - {} iterations\n - {} prisoners\n - {} chances",
-            self.version,
-            self.optimized,
-            self.iterations,
-            self.prisoners,
-            self.chances,
+            self.version, self.optimized, self.iterations, self.prisoners, self.chances,
         )
     }
 }
@@ -46,11 +42,11 @@ struct Setup {
     pub count: usize,
     pub chances: usize,
 
-    rng: rand::rngs::ThreadRng,
+    rng: SmallRng,
 }
 
 impl Setup {
-    fn new(args: &Args) -> Setup {
+    fn new(args: &Args, thread_rng: &mut rand::rngs::ThreadRng) -> Setup {
         // There are `count` numbered slips and `count` numbered boxes, one for each
         // prisoner, and each slip is randomly placed in a box.
         let slips_seen: Vec<bool> = match args.optimized {
@@ -63,7 +59,7 @@ impl Setup {
             slips_seen,
             count: args.prisoners,
             chances: args.chances,
-            rng: rand::thread_rng(),
+            rng: SmallRng::from_rng(thread_rng).unwrap(),
         }
     }
 
@@ -157,7 +153,7 @@ fn run_optimized(setup: &mut Setup) -> bool {
     for prisoner in 0..setup.count {
         let mut next_box: usize = prisoner;
 
-        if setup.slips_seen[prisoner] == true {
+        if setup.slips_seen[prisoner] {
             continue;
         }
 
@@ -210,7 +206,7 @@ fn run_naive(setup: &mut Setup) -> bool {
         opened_boxes.fill(false);
     }
 
-    prisoners.into_iter().all(|found| found)
+    !prisoners.into_iter().any(|found| !found)
 }
 
 /// The below function is an optimized version of the naive logic.
@@ -220,15 +216,12 @@ fn run_naive_optimized(setup: &mut Setup) -> bool {
     for prisoner in 0..setup.count {
         to_open.shuffle(&mut setup.rng);
 
-        for idx in 0..=setup.chances {
-            if idx == setup.chances {
-                // No need to continue -- one prisoner has failed, so they all have.
-                return false;
-            }
-
-            if to_open[idx] == prisoner {
-                break;
-            }
+        if !to_open
+            .iter()
+            .take(setup.chances)
+            .any(|number| *number == prisoner)
+        {
+            return false;
         }
     }
 
@@ -260,8 +253,9 @@ fn main() {
         };
 
         pool.execute(move || {
+            let mut thread_rng = rand::thread_rng();
             let mut wins: u32 = 0;
-            let mut setup: Setup = Setup::new(&args);
+            let mut setup: Setup = Setup::new(&args, &mut thread_rng);
 
             for _ in 0..to_execute {
                 setup.reset();
@@ -273,19 +267,18 @@ fn main() {
         });
     }
 
-    let wins: u32 = rx.iter().take(threads as usize).fold(0, |a, b| a + b);
+    let wins: u32 = rx.iter().take(threads).sum();
 
     let finished = start.elapsed();
 
     println!(
         "complete in {:.3} seconds! of {} runs, {} were successful ({:.2}%)",
-        finished.as_millis() as f32 / 1000 as f32,
+        finished.as_millis() as f32 / 1000_f32,
         args.iterations,
         wins,
         (wins as f32 / args.iterations as f32) * 100.0,
     );
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -299,7 +292,7 @@ mod tests {
             slips_seen: vec![],
             count: 10,
             chances: 5,
-            rng: rand::thread_rng(),
+            rng: SmallRng::from_entropy(),
         };
 
         assert!(run(&mut setup));
@@ -313,7 +306,7 @@ mod tests {
             slips_seen: vec![],
             count: 10,
             chances: 5,
-            rng: rand::thread_rng(),
+            rng: SmallRng::from_entropy(),
         };
 
         assert_eq!(run(&mut setup), false);
@@ -327,7 +320,7 @@ mod tests {
             slips_seen: vec![false; 10],
             count: 10,
             chances: 5,
-            rng: rand::thread_rng(),
+            rng: SmallRng::from_entropy(),
         };
 
         assert!(run_optimized(&mut setup));
@@ -341,7 +334,7 @@ mod tests {
             slips_seen: vec![false; 10],
             count: 10,
             chances: 5,
-            rng: rand::thread_rng(),
+            rng: SmallRng::from_entropy(),
         };
 
         assert_eq!(run_optimized(&mut setup), false);
@@ -356,10 +349,25 @@ mod tests {
             slips_seen: vec![],
             count: 10,
             chances: 10,
-            rng: rand::thread_rng(),
+            rng: SmallRng::from_entropy(),
         };
 
         assert!(run_naive(&mut setup));
+    }
+
+    #[test]
+    fn test_run_naive_failure_known_layout() {
+        // Use the box layout from the documentation above. If the prisoner gets
+        // no chances, they will always lose.
+        let mut setup = Setup {
+            boxes: vec![4, 3, 9, 2, 7, 8, 6, 5, 0, 1],
+            slips_seen: vec![],
+            count: 10,
+            chances: 0,
+            rng: SmallRng::from_entropy(),
+        };
+
+        assert!(!run_naive(&mut setup));
     }
 
     #[test]
@@ -371,9 +379,24 @@ mod tests {
             slips_seen: vec![],
             count: 10,
             chances: 10,
-            rng: rand::thread_rng(),
+            rng: SmallRng::from_entropy(),
         };
 
         assert!(run_naive_optimized(&mut setup));
+    }
+
+    #[test]
+    fn test_run_naive_optimized_failure_known_layout() {
+        // Use the box layout from the documentation above. If the prisoner gets
+        // no chances, they will always lose.
+        let mut setup = Setup {
+            boxes: vec![4, 3, 9, 2, 7, 8, 6, 5, 0, 1],
+            slips_seen: vec![],
+            count: 10,
+            chances: 0,
+            rng: SmallRng::from_entropy(),
+        };
+
+        assert!(!run_naive_optimized(&mut setup));
     }
 }
