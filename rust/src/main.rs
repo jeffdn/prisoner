@@ -1,10 +1,9 @@
 use std::fmt;
-use std::sync::mpsc::channel;
 use std::time::Instant;
 
 use clap::Parser;
 use rand::{rngs::SmallRng, seq::SliceRandom, Rng, SeedableRng};
-use threadpool::ThreadPool;
+use rayon::prelude::*;
 
 #[derive(Parser, Clone)]
 struct Args {
@@ -135,7 +134,7 @@ fn run(setup: &mut Setup) -> bool {
                 true => {
                     *found = true;
                     break;
-                },
+                }
                 false => next_box = slip,
             }
         }
@@ -229,11 +228,8 @@ fn run_naive_optimized(setup: &mut Setup) -> bool {
 }
 
 fn main() {
-    let threads: usize = 16;
-    let pool = ThreadPool::new(16);
-    let (tx, rx) = channel();
-
     let args = Args::parse();
+    let threads = rayon::current_num_threads();
 
     let handler = match (&args.version[..], args.optimized) {
         ("naive", false) => run_naive,
@@ -244,15 +240,14 @@ fn main() {
 
     let start = Instant::now();
 
-    for i in 0..threads {
-        let tx = tx.clone();
-        let args = args.clone();
-        let to_execute = match i + 1 == threads {
-            true => (args.iterations / threads) + (args.iterations % threads),
-            false => args.iterations / threads,
-        };
+    let wins: u32 = (0..threads)
+        .into_par_iter()
+        .map(|i| {
+            let to_execute = match i + 1 == threads {
+                true => (args.iterations / threads) + (args.iterations % threads),
+                false => args.iterations / threads,
+            };
 
-        pool.execute(move || {
             let mut thread_rng = rand::thread_rng();
             let mut wins: u32 = 0;
             let mut setup: Setup = Setup::new(&args, &mut thread_rng);
@@ -263,11 +258,9 @@ fn main() {
                 wins += handler(&mut setup) as u32;
             }
 
-            tx.send(wins).unwrap();
-        });
-    }
-
-    let wins: u32 = rx.iter().take(threads).sum();
+            wins
+        })
+        .sum();
 
     let finished = start.elapsed();
 
